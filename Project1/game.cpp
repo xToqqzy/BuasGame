@@ -3,22 +3,79 @@
 #include <vector>
 #include <cstdlib>
 #include <ctime>
+#include <iostream>
+#include <fstream>
+#include <algorithm>
 
 // Define constants
 const int NUM_OBJECTS = 10;
 const int NUM_ENEMIES = 5;
 const float OBJECT_RADIUS = 20.0f;
-const float ENEMY_SPEED = 0.6f; // Increased enemy speed
-const float PLAYER_SPEED = 2.4f; // Player movement speed
+const float ENEMY_SPEED = 0.8f; // Increased enemy speed
+const float PLAYER_SPEED = 2.0f; // Player movement speed
+
+// Define a structure to represent a player
+struct Player {
+    std::string name;
+    int score;
+};
+
+// Function to save player data to a file
+void savePlayerData(const std::vector<Player>& players) {
+    std::ofstream file("leaderboard.txt");
+    if (file.is_open()) {
+        for (const Player& player : players) {
+            file << player.name << " " << player.score << std::endl;
+        }
+        file.close();
+    }
+}
+
+// Function to load player data from a file
+std::vector<Player> loadPlayerData() {
+    std::vector<Player> players;
+    std::ifstream file("leaderboard.txt");
+    if (file.is_open()) {
+        std::string name;
+        int score;
+        while (file >> name >> score) {
+            players.push_back({ name, score });
+        }
+        file.close();
+    }
+    return players;
+}
+
+// Function to display the leaderboard
+void displayLeaderboard(const std::vector<Player>& players) {
+    std::cout << "Top 10 Leaderboard:\n";
+    int rank = 1;
+    for (const Player& player : players) {
+        std::cout << rank << ". " << player.name << ": " << player.score << std::endl;
+        rank++;
+        if (rank > 10) break; // Display only the top 10 players
+    }
+}
+
+// Function to update the leaderboard with the current player's score
+void updateLeaderboard(std::vector<Player>& players, const Player& currentPlayer) {
+    players.push_back(currentPlayer);
+    std::sort(players.begin(), players.end(), [](const Player& a, const Player& b) {
+        return a.score > b.score;
+        });
+    if (players.size() > 10) {
+        players.pop_back(); // Keep only the top 10 players
+    }
+}
 
 // Player class
-class Player {
+class PlayerObject {
 public:
     sf::Texture texture;
     sf::Sprite sprite;
     sf::Vector2f velocity;
 
-    Player(float windowWidth, float windowHeight) {
+    PlayerObject(float windowWidth, float windowHeight) {
         if (!texture.loadFromFile("assets/player.png")) {
             // Handle error if texture loading fails
         }
@@ -57,6 +114,13 @@ public:
         shape.setPosition(x, y);
         isCollected = false;
     }
+
+    void respawn(float windowWidth, float windowHeight) {
+        // Respawn object at a random position
+        shape.setPosition(static_cast<float>(rand() % static_cast<int>(windowWidth)),
+            static_cast<float>(rand() % static_cast<int>(windowHeight)));
+        isCollected = false;
+    }
 };
 
 // Enemy class
@@ -73,8 +137,9 @@ public:
         sprite.setTexture(texture);
         sprite.setPosition(x, y);
         sprite.setScale(0.5f, 0.5f); // Scale the sprite to half its original size
-        velocity.x = ENEMY_SPEED * (rand() % 3 + 1); // Random speed between 1 and 3 times ENEMY_SPEED
-        velocity.y = ENEMY_SPEED * (rand() % 3 + 1); // Random speed between 1 and 3 times ENEMY_SPEED
+        // Assign random velocity
+        velocity.x = (rand() % 2 == 0 ? ENEMY_SPEED : -ENEMY_SPEED); // Randomize direction
+        velocity.y = (rand() % 2 == 0 ? ENEMY_SPEED : -ENEMY_SPEED); // Randomize direction
     }
 
     void update(float windowWidth, float windowHeight) {
@@ -132,21 +197,20 @@ void loadLevel1(std::vector<Object>& objects, std::vector<Enemy>& enemies, sf::T
     }
 }
 
-// Function to handle game over screen
-void handleGameOver(sf::RenderWindow& window, sf::Font& font) {
+void handleGameOver(sf::RenderWindow& window, sf::Font& font, int& score, std::vector<Object>& objects, std::vector<Enemy>& enemies, sf::Texture& backgroundTexture, float windowWidth, float windowHeight, PlayerObject& player) {
     // Game over message
     sf::Text gameOverText;
     gameOverText.setFont(font);
-    gameOverText.setString("Game Over");
+    gameOverText.setString("Game Over\nScore: " + std::to_string(score));
     gameOverText.setCharacterSize(40);
     gameOverText.setFillColor(sf::Color::White);
-    gameOverText.setPosition(window.getSize().x / 2 - 100, window.getSize().y / 2 - 40);
+    gameOverText.setPosition(window.getSize().x / 2 - 100, window.getSize().y / 4); // Adjusted position
+
+    // Return to Menu button
+    Button returnToMenuButton(window.getSize().x / 2 - 120, window.getSize().y / 2 + 90, 200, 50, "Menu", font);
 
     // Restart button
-    Button restartButton(window.getSize().x / 2 - 50, window.getSize().y / 2 + 20, 100, 50, "Restart", font);
-
-    // Quit button
-    Button quitButton(window.getSize().x / 2 - 50, window.getSize().y / 2 + 90, 100, 50, "Quit Game", font);
+    Button restartButton(window.getSize().x / 2 + 20, window.getSize().y / 2 + 90, 200, 50, "Restart", font);
 
     while (window.isOpen()) {
         sf::Event event;
@@ -157,13 +221,29 @@ void handleGameOver(sf::RenderWindow& window, sf::Font& font) {
             // Handle button clicks
             if (event.type == sf::Event::MouseButtonPressed) {
                 sf::Vector2f mousePosition = window.mapPixelToCoords(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
-                if (restartButton.isClicked(mousePosition)) {
-                    // Restart the game
+                if (returnToMenuButton.isClicked(mousePosition)) {
+                    // Reset score
+                    score = 0;
+                    // Reset objects and enemies
+                    objects.clear();
+                    enemies.clear();
+                    loadLevel1(objects, enemies, backgroundTexture, windowWidth, windowHeight);
+                    // Reset player position
+                    player.sprite.setPosition(windowWidth / 2, windowHeight / 2);
+                    // Close the game over window
                     return;
                 }
-                else if (quitButton.isClicked(mousePosition)) {
-                    // Quit the game
-                    window.close();
+                else if (restartButton.isClicked(mousePosition)) {
+                    // Reset score
+                    score = 0;
+                    // Reset objects and enemies
+                    objects.clear();
+                    enemies.clear();
+                    loadLevel1(objects, enemies, backgroundTexture, windowWidth, windowHeight);
+                    // Reset player position
+                    player.sprite.setPosition(windowWidth / 2, windowHeight / 2);
+                    // Close the game over window
+                    return;
                 }
             }
         }
@@ -174,70 +254,13 @@ void handleGameOver(sf::RenderWindow& window, sf::Font& font) {
         // Draw game over message
         window.draw(gameOverText);
 
-        // Draw restart button
-        window.draw(restartButton.shape);
-        window.draw(restartButton.text);
-
-        // Draw quit button
-        window.draw(quitButton.shape);
-        window.draw(quitButton.text);
-
-        // Display the window
-        window.display();
-    }
-}
-
-// Function to handle level completion
-void handleLevelCompletion(sf::RenderWindow& window, sf
-    ::Font& font, bool& gameRestarted) {
-    // Level completed message
-    sf::Text levelCompletedText;
-    levelCompletedText.setFont(font);
-    levelCompletedText.setString("Level Completed!");
-    levelCompletedText.setCharacterSize(40);
-    levelCompletedText.setFillColor(sf::Color::White);
-    levelCompletedText.setPosition(window.getSize().x / 2 - 150, window.getSize().y / 2 - 40);
-
-    // Restart button
-    Button restartButton(window.getSize().x / 2 - 50, window.getSize().y / 2 + 20, 100, 50, "Restart Level", font);
-
-    // Quit button
-    Button quitButton(window.getSize().x / 2 - 50, window.getSize().y / 2 + 90, 100, 50, "Quit Game", font);
-
-    while (window.isOpen()) {
-        sf::Event event;
-        while (window.pollEvent(event)) {
-            if (event.type == sf::Event::Closed) {
-                window.close();
-            }
-            // Handle button clicks
-            if (event.type == sf::Event::MouseButtonPressed) {
-                sf::Vector2f mousePosition = window.mapPixelToCoords(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
-                if (restartButton.isClicked(mousePosition)) {
-                    // Restart the game
-                    gameRestarted = true;
-                    return;
-                }
-                else if (quitButton.isClicked(mousePosition)) {
-                    // Quit the game
-                    window.close();
-                }
-            }
-        }
-
-        // Clear the window
-        window.clear();
-
-        // Draw level completed message
-        window.draw(levelCompletedText);
+        // Draw return to menu button
+        window.draw(returnToMenuButton.shape);
+        window.draw(returnToMenuButton.text);
 
         // Draw restart button
         window.draw(restartButton.shape);
         window.draw(restartButton.text);
-
-        // Draw quit button
-        window.draw(quitButton.shape);
-        window.draw(quitButton.text);
 
         // Display the window
         window.display();
@@ -278,7 +301,7 @@ int main() {
     sf::Sound collectSound(buffer);
 
     // Load player character
-    Player player(WINDOW_WIDTH, WINDOW_HEIGHT);
+    PlayerObject player(WINDOW_WIDTH, WINDOW_HEIGHT);
 
     // Score counter
     int score = 0;
@@ -289,12 +312,20 @@ int main() {
         // Handle error if font loading fails
     }
 
+    // Title screen
+    sf::Text titleText;
+    titleText.setFont(font);
+    titleText.setString("Collect Game\nPress P to Play\nPress Q to Quit");
+    titleText.setCharacterSize(40);
+    titleText.setFillColor(sf::Color::White);
+    titleText.setPosition(WINDOW_WIDTH / 2 - 200, WINDOW_HEIGHT / 4);
+
     // Quit button
     Button quitButton(WINDOW_WIDTH - 120, 10, 100, 50, "Quit Game", font);
 
     // Game loop
-    bool gameRestarted = false; // Flag to indicate if game has been restarted
-    bool gamePaused = false; // Flag to indicate if game is paused
+    bool inGame = false; // Flag to indicate if the game is running
+    bool paused = false; // Flag to indicate if the game is paused
     while (window.isOpen()) {
         // Handle events
         sf::Event event;
@@ -302,192 +333,198 @@ int main() {
             if (event.type == sf::Event::Closed)
                 window.close();
 
-            if (!gameRestarted && event.type == sf::Event::MouseButtonPressed) {
-                sf::Vector2f mousePosition = window.mapPixelToCoords(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
-                if (quitButton.isClicked(mousePosition)) {
-                    window.close();
+            if (event.type == sf::Event::KeyPressed) {
+                if (event.key.code == sf::Keyboard::P && !inGame && !paused) {
+                    inGame = true; // Start the game
+                }
+                else if (event.key.code == sf::Keyboard::Escape && inGame) {
+                    paused = true; // Toggle pause state
+                }
+                else if (event.key.code == sf::Keyboard::Q && !inGame && !paused) {
+                    window.close(); // Quit if in title screen
                 }
             }
+        }
 
-            if (!gameRestarted && event.type == sf::Event::KeyReleased && event.key.code == sf::Keyboard::Escape) {
-                // Toggle pause menu
-                gamePaused = !gamePaused;
-                if (gamePaused) {
-                    // If paused, show the pause menu
-                    // Pause menu buttons
-                    Button continueButton(WINDOW_WIDTH / 2 - 50, WINDOW_HEIGHT / 2 - 20, 100, 50, "Continue", font);
-                    Button restartLevelButton(WINDOW_WIDTH / 2 - 50, WINDOW_HEIGHT / 2 + 50, 100, 50, "Restart Level", font);
-                    Button quitButton(WINDOW_WIDTH / 2 - 50, WINDOW_HEIGHT / 2 + 120,
-                        100, 50, "Quit Game", font);
+        if (!inGame) {
+            // Clear the window
+            window.clear();
 
-                    while (window.isOpen() && gamePaused) {
-                        sf::Event pauseEvent;
-                        while (window.pollEvent(pauseEvent)) {
-                            if (pauseEvent.type == sf::Event::Closed) {
-                                window.close();
+            // Draw title screen
+            window.draw(titleText);
+
+            // Draw quit button
+            window.draw(quitButton.shape);
+            window.draw(quitButton.text);
+
+            // Display the window
+            window.display();
+        }
+        else {
+            if (paused) {
+                // Draw paused menu
+                sf::Text pausedText;
+                pausedText.setFont(font);
+                pausedText.setString("Paused");
+                pausedText.setCharacterSize(40);
+                pausedText.setFillColor(sf::Color::White);
+                pausedText.setPosition(WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 - 50);
+
+                // Continue button
+                Button continueButton(WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 + 20, 200, 50, "Continue", font);
+
+                // Return to Menu button
+                Button returnToMenuButton(WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 + 100, 200, 50, "Menu", font);
+
+                // Restart button
+                Button restartButton(WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 + 180, 200, 50, "Restart", font);
+
+                while (window.isOpen() && paused) {
+                    sf::Event event;
+                    while (window.pollEvent(event)) {
+                        if (event.type == sf::Event::Closed) {
+                            window.close();
+                        }
+                        // Handle button clicks
+                        if (event.type == sf::Event::MouseButtonPressed) {
+                            sf::Vector2f mousePosition = window.mapPixelToCoords(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
+                            if (continueButton.isClicked(mousePosition)) {
+                                paused = false; // Resume the game
                             }
-                            if (pauseEvent.type == sf::Event::MouseButtonPressed) {
-                                sf::Vector2f mousePosition = window.mapPixelToCoords(sf::Vector2i(pauseEvent.mouseButton.x, pauseEvent.mouseButton.y));
-                                if (continueButton.isClicked(mousePosition)) {
-                                    // Continue the game
-                                    gamePaused = false;
-                                }
-                                else if (restartLevelButton.isClicked(mousePosition)) {
-                                    // Restart the level
-                                    // Reload Level 1
-                                    // Clear objects and enemies vectors
-                                    objects.clear();
-                                    enemies.clear();
-                                    loadLevel1(objects, enemies, backgroundTexture, WINDOW_WIDTH, WINDOW_HEIGHT);
-                                    // Reset player position
-                                    player.sprite.setPosition(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
-                                    // Reset game over flag
-                                    gameRestarted = true;
-                                    gamePaused = false;
-                                }
-                                else if (quitButton.isClicked(mousePosition)) {
-                                    // Quit the game
-                                    window.close();
-                                }
+                            else if (returnToMenuButton.isClicked(mousePosition)) {
+                                inGame = false; // Return to title screen
+                                paused = false;
+                            }
+                            else if (restartButton.isClicked(mousePosition)) {
+                                // Reset score
+                                score = 0;
+                                // Reset objects and enemies
+                                objects.clear();
+                                enemies.clear();
+                                loadLevel1(objects, enemies, backgroundTexture, WINDOW_WIDTH, WINDOW_HEIGHT);
+                                // Reset player position
+                                player.sprite.setPosition(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
+                                // Resume the game
+                                paused = false;
                             }
                         }
+                    }
 
-                        // Clear the window
-                        window.clear();
+                    // Clear the window
+                    window.clear();
 
-                        // Draw pause menu
-                        // Draw continue button
-                        window.draw(continueButton.shape);
-                        window.draw(continueButton.text);
+                    // Draw paused menu
+                    window.draw(pausedText);
+                    window.draw(continueButton.shape);
+                    window.draw(continueButton.text);
+                    window.draw(returnToMenuButton.shape);
+                    window.draw(returnToMenuButton.text);
+                    window.draw(restartButton.shape);
+                    window.draw(restartButton.text);
 
-                        // Draw restart level button
-                        window.draw(restartLevelButton.shape);
-                        window.draw(restartLevelButton.text);
+                    // Display the window
+                    window.display();
+                }
+            }
+            else {
+                // Player movement
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) {
+                    player.sprite.move(0, -PLAYER_SPEED);
+                }
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) {
+                    player.sprite.move(-PLAYER_SPEED, 0);
+                }
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) {
+                    player.sprite.move(0, PLAYER_SPEED);
+                }
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) {
+                    player.sprite.move(PLAYER_SPEED, 0);
+                }
 
-                        // Draw quit button
-                        window.draw(quitButton.shape);
-                        window.draw(quitButton.text);
+                // Update player
+                player.update(WINDOW_WIDTH, WINDOW_HEIGHT);
 
-                        // Display the window
-                        window.display();
+                // Collision detection between player and objects
+                for (Object& obj : objects) {
+                    if (player.sprite.getGlobalBounds().intersects(obj.shape.getGlobalBounds()) && !obj.isCollected) {
+                        obj.isCollected = true;
+                        score++;
+                        collectSound.play();
                     }
                 }
-            }
-        }
 
-        // Restart the game if restarted
-        if (gameRestarted) {
-            gameRestarted = false; // Reset the flag
-        }
-
-        // Continue the game if not paused
-        if (!gamePaused) {
-            // Handle player controls
-            player.velocity.x = 0;
-            player.velocity.y = 0;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left))
-                player.velocity.x = -PLAYER_SPEED;
-
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right))
-                player.velocity.x = PLAYER_SPEED;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up))
-                player.velocity.y = -PLAYER_SPEED;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down))
-                player.velocity.y = PLAYER_SPEED;
-
-            // Update player position
-            player.update(WINDOW_WIDTH, WINDOW_HEIGHT);
-
-            // Collision detection and scoring
-            bool allCollected = true; // Flag to check if all collectibles are collected
-            for (auto& obj : objects) {
-                if (!obj.isCollected && player.sprite.getGlobalBounds().intersects(obj.shape.getGlobalBounds())) {
-                    // Play collect sound
-                    collectSound.play();
-                    // Increment score
-                    score++;
-                    // Mark object as collected
-                    obj.isCollected = true;
+                // Check if objects need to be respawned
+                bool respawnNeeded = false;
+                for (const Object& obj : objects) {
+                    if (obj.isCollected) {
+                        respawnNeeded = true;
+                        break;
+                    }
                 }
-                if (!obj.isCollected) {
-                    allCollected = false; // At least one object is not collected
+                if (respawnNeeded) {
+                    for (Object& obj : objects) {
+                        if (obj.isCollected) {
+                            obj.respawn(WINDOW_WIDTH, WINDOW_HEIGHT);
+                        }
+                    }
                 }
-            }
 
-            // Check if all collectibles are collected
-            if (allCollected) {
-                // Handle level completion
-                handleLevelCompletion(window, font, gameRestarted);
-                // Reset score
-                score = 0;
-                // Restart the game
-                objects.clear();
-                enemies.clear();
-                loadLevel1(objects, enemies, backgroundTexture, WINDOW_WIDTH, WINDOW_HEIGHT);
-                // Reset player position
-                player.sprite.setPosition(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
-            }
-
-            // Update enemies position
-            for (auto& enemy : enemies) {
-                enemy.update(WINDOW_WIDTH, WINDOW_HEIGHT);
-                // Collision detection with player
-                if (player.sprite.getGlobalBounds().intersects(enemy.sprite.getGlobalBounds())) {
-                    // Game over
-                    handleGameOver(window, font);
-                    // Reset score
-                    score = 0;
-                    // Restart the game
-                    objects.clear();
-                    enemies.clear();
-                    loadLevel1(objects, enemies, backgroundTexture, WINDOW_WIDTH, WINDOW_HEIGHT);
-                    // Reset player position
-                    player.sprite.setPosition(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
-                    // Reset game over flag
-                    gameRestarted = true;
+                // Collision detection between player and enemies
+                for (Enemy& enemy : enemies) {
+                    if (player.sprite.getGlobalBounds().intersects(enemy.sprite.getGlobalBounds())) {
+                        // Game over
+                        std::vector<Player> players = loadPlayerData();
+                        Player currentPlayer;
+                        currentPlayer.name = "Player"; // Set the player name to whatever you want
+                        currentPlayer.score = score;
+                        updateLeaderboard(players, currentPlayer);
+                        savePlayerData(players);
+                        displayLeaderboard(players);
+                        handleGameOver(window, font, score, objects, enemies, backgroundTexture, WINDOW_WIDTH, WINDOW_HEIGHT, player);
+                        inGame = false;
+                    }
                 }
+
+                // Update enemies
+                for (Enemy& enemy : enemies) {
+                    enemy.update(WINDOW_WIDTH, WINDOW_HEIGHT);
+                }
+
+                // Clear the window
+                window.clear();
+
+                // Draw background
+                window.draw(backgroundSprite);
+
+                // Draw objects
+                for (const Object& obj : objects) {
+                    if (!obj.isCollected) {
+                        window.draw(obj.shape);
+                    }
+                }
+
+                // Draw enemies
+                for (const Enemy& enemy : enemies) {
+                    window.draw(enemy.sprite);
+                }
+
+                // Draw player
+                window.draw(player.sprite);
+
+                // Draw score
+                sf::Text scoreText;
+                scoreText.setFont(font);
+                scoreText.setString("Score: " + std::to_string(score));
+                scoreText.setCharacterSize(24);
+                scoreText.setFillColor(sf::Color::White);
+                scoreText.setPosition(10, 10);
+                window.draw(scoreText);
+
+                // Display the window
+                window.display();
             }
         }
-
-        // Clear the window
-        window.clear();
-
-        // Draw background
-        window.draw(backgroundSprite);
-
-        // Draw objects
-        for (auto& obj : objects) {
-            if (!obj.isCollected) {
-                window.draw(obj.shape);
-            }
-        }
-
-        // Draw enemies
-        for (auto& enemy : enemies) {
-            window.draw(enemy.sprite);
-        }
-
-        // Draw player
-        window.draw(player.sprite);
-
-        // Draw score
-        sf::Text scoreText;
-        scoreText.setFont(font);
-        scoreText.setString("Score: " + std::to_string(score));
-        scoreText.setCharacterSize(24);
-        scoreText.setFillColor(sf::Color::White);
-        scoreText.setPosition(10, 10);
-        window.draw(scoreText);
-
-        // Draw quit button
-        window.draw(quitButton.shape);
-        window.draw(quitButton.text);
-
-        // Display the window
-        window.display();
     }
 
     return 0;
 }
-
-
