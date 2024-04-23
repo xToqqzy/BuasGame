@@ -104,12 +104,12 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\Dilshad\Desktop\SFML-2.6.1-windows-vc17-64-bit\SFML-2.6.1\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Itachi Uchiha\source\repos\BuasGame\Project1\SFML-2.6.1\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\Users\Dilshad\Desktop\SFML-2.6.1-windows-vc17-64-bit\SFML-2.6.1\lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Users\Itachi Uchiha\source\repos\BuasGame\Project1\SFML-2.6.1\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>sfml-graphics-d.lib;sfml-window-d.lib;sfml-audio-d.lib;sfml-network-d.lib;sfml-system-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
@@ -135,24 +135,9 @@
   <ItemGroup>
     <ClCompile Include="game.cpp" />
     <ClCompile Include="source.cpp" />
-    <ClCompile Include="TileMap.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="Menu.h" />
-    <ClInclude Include="resource.h" />
-    <ClInclude Include="TileMap.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Project1.rc" />
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="..\assets\background.jpg" />
-    <Image Include="..\assets\collectible_object.png" />
-    <Image Include="..\assets\player.png" />
-    <Image Include="assets\enemy.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Media Include="..\assets\game-bonus-144751.wav" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -4,103 +4,21 @@
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
-#include <fstream>
-#include <algorithm>
 
 // Define constants
 const int NUM_OBJECTS = 10;
 const int NUM_ENEMIES = 5;
-const float OBJECT_RADIUS = 20.0f;
-const float ENEMY_SPEED = 0.8f; // Increased enemy speed
-const float PLAYER_SPEED = 2.0f; // Player movement speed
+const float OBJECT_RADIUS = 10.0f;
+const float ENEMY_SPEED = 0.2f; // Increased enemy speed
+const float PLAYER_SPEED = 0.4f; // Player movement speed
 
-// Define a structure to represent a player
-struct Player {
-    std::string name;
-    int score;
-};
-
-// Function to save player data to a file
-void savePlayerData(const std::vector<Player>& players) {
-    std::ofstream file("leaderboard.txt");
-    if (file.is_open()) {
-        for (const Player& player : players) {
-            file << player.name << " " << player.score << std::endl;
-        }
-        file.close();
-    }
-}
-
-// Function to load player data from a file
-std::vector<Player> loadPlayerData() {
-    std::vector<Player> players;
-    std::ifstream file("leaderboard.txt");
-    if (file.is_open()) {
-        std::string name;
-        int score;
-        while (file >> name >> score) {
-            players.push_back({ name, score });
-        }
-        file.close();
-    }
-    return players;
-}
-
-// Function to display the leaderboard
-void displayLeaderboard(const std::vector<Player>& players) {
-    std::cout << "Top 10 Leaderboard:\n";
-    int rank = 1;
-    for (const Player& player : players) {
-        std::cout << rank << ". " << player.name << ": " << player.score << std::endl;
-        rank++;
-        if (rank > 10) break; // Display only the top 10 players
-    }
-}
-
-// Function to update the leaderboard with the current player's score
-void updateLeaderboard(std::vector<Player>& players, const Player& currentPlayer) {
-    players.push_back(currentPlayer);
-    std::sort(players.begin(), players.end(), [](const Player& a, const Player& b) {
-        return a.score > b.score;
-        });
-    if (players.size() > 10) {
-        players.pop_back(); // Keep only the top 10 players
-    }
-}
-
-// Player class
-class PlayerObject {
-public:
-    sf::Texture texture;
-    sf::Sprite sprite;
-    sf::Vector2f velocity;
-
-    PlayerObject(float windowWidth, float windowHeight) {
-        if (!texture.loadFromFile("assets/player.png")) {
-            // Handle error if texture loading fails
-        }
-        sprite.setTexture(texture);
-        sprite.setPosition(windowWidth / 2, windowHeight / 2);
-    }
-
-    void update(float windowWidth, float windowHeight) {
-        sprite.move(velocity);
-
-        // Constrain player within window boundaries
-        if (sprite.getPosition().x < 0) {
-            sprite.setPosition(0, sprite.getPosition().y);
-        }
-        if (sprite.getPosition().x > windowWidth - sprite.getGlobalBounds().width) {
-            sprite.setPosition(windowWidth - sprite.getGlobalBounds().width, sprite.getPosition().y);
-        }
-        if (sprite.getPosition().y < 0) {
-            sprite.setPosition(sprite.getPosition().x, 0);
-        }
-        if (sprite.getPosition().y > windowHeight - sprite.getGlobalBounds().height) {
-            sprite.setPosition(sprite.getPosition().x, windowHeight - sprite.getGlobalBounds().height);
-        }
-    }
-};
+// Define Pac-Man grid constants
+const int GRID_WIDTH = 30;
+const int GRID_HEIGHT = 21;
+const int CELL_SIZE = 30;
+const int WALL = 1;
+const int EMPTY = 0;
+const int PELLET = 2;
 
 // Object class
 class Object {
@@ -136,7 +54,7 @@ public:
         }
         sprite.setTexture(texture);
         sprite.setPosition(x, y);
-        sprite.setScale(0.5f, 0.5f); // Scale the sprite to half its original size
+        sprite.setScale(0.2f, 0.2f); // Scale the sprite to match player size
         // Assign random velocity
         velocity.x = (rand() % 2 == 0 ? ENEMY_SPEED : -ENEMY_SPEED); // Randomize direction
         velocity.y = (rand() % 2 == 0 ? ENEMY_SPEED : -ENEMY_SPEED); // Randomize direction
@@ -176,12 +94,7 @@ public:
 };
 
 // Load Level 1 assets and configurations
-void loadLevel1(std::vector<Object>& objects, std::vector<Enemy>& enemies, sf::Texture& backgroundTexture, float windowWidth, float windowHeight) {
-    // Load background texture for Level 1
-    if (!backgroundTexture.loadFromFile("assets/background_level1.jpg")) {
-        // Handle error if texture loading fails
-    }
-
+void loadLevel1(std::vector<Object>& objects, std::vector<Enemy>& enemies, float windowWidth, float windowHeight) {
     // Create objects to collect for Level 1
     for (int i = 0; i < NUM_OBJECTS; ++i) {
         float x = static_cast<float>(rand() % static_cast<int>(windowWidth));
@@ -197,73 +110,50 @@ void loadLevel1(std::vector<Object>& objects, std::vector<Enemy>& enemies, sf::T
     }
 }
 
-void handleGameOver(sf::RenderWindow& window, sf::Font& font, int& score, std::vector<Object>& objects, std::vector<Enemy>& enemies, sf::Texture& backgroundTexture, float windowWidth, float windowHeight, PlayerObject& player) {
-    // Game over message
-    sf::Text gameOverText;
-    gameOverText.setFont(font);
-    gameOverText.setString("Game Over\nScore: " + std::to_string(score));
-    gameOverText.setCharacterSize(40);
-    gameOverText.setFillColor(sf::Color::White);
-    gameOverText.setPosition(window.getSize().x / 2 - 100, window.getSize().y / 4); // Adjusted position
+// Draw Pac-Man like background
+void drawBackground(sf::RenderWindow& window) {
+    // Pac-Man grid representing the background
+    int grid[GRID_HEIGHT][GRID_WIDTH] = {
+        {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
+        {1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+        {1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1},
+        {1, 2, 1, 2, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 2, 0, 1},
+        {1, 0, 1, 2, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1},
+        {1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1},
+        {1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1},
+        {1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+        {1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1},
+        {1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1},
+        {1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
+        {1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1},
+        {1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1},
+        {1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1},
+        {1, 0, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1},
+        {1, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 1},
+        {1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1},
+        {1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+        {1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1},
+        {1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1},
+        {1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1},
+   
+    };
 
-    // Return to Menu button
-    Button returnToMenuButton(window.getSize().x / 2 - 120, window.getSize().y / 2 + 90, 200, 50, "Menu", font);
-
-    // Restart button
-    Button restartButton(window.getSize().x / 2 + 20, window.getSize().y / 2 + 90, 200, 50, "Restart", font);
-
-    while (window.isOpen()) {
-        sf::Event event;
-        while (window.pollEvent(event)) {
-            if (event.type == sf::Event::Closed) {
-                window.close();
+    // Draw the grid
+    for (int i = 0; i < GRID_HEIGHT; ++i) {
+        for (int j = 0; j < GRID_WIDTH; ++j) {
+            sf::RectangleShape cell(sf::Vector2f(CELL_SIZE, CELL_SIZE));
+            cell.setPosition(j * CELL_SIZE, i * CELL_SIZE);
+            if (grid[i][j] == WALL) {
+                cell.setFillColor(sf::Color(0, 0, 128)); // Blue walls
             }
-            // Handle button clicks
-            if (event.type == sf::Event::MouseButtonPressed) {
-                sf::Vector2f mousePosition = window.mapPixelToCoords(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
-                if (returnToMenuButton.isClicked(mousePosition)) {
-                    // Reset score
-                    score = 0;
-                    // Reset objects and enemies
-                    objects.clear();
-                    enemies.clear();
-                    loadLevel1(objects, enemies, backgroundTexture, windowWidth, windowHeight);
-                    // Reset player position
-                    player.sprite.setPosition(windowWidth / 2, windowHeight / 2);
-                    // Close the game over window
-                    return;
-                }
-                else if (restartButton.isClicked(mousePosition)) {
-                    // Reset score
-                    score = 0;
-                    // Reset objects and enemies
-                    objects.clear();
-                    enemies.clear();
-                    loadLevel1(objects, enemies, backgroundTexture, windowWidth, windowHeight);
-                    // Reset player position
-                    player.sprite.setPosition(windowWidth / 2, windowHeight / 2);
-                    // Close the game over window
-                    return;
-                }
+            else if (grid[i][j] == EMPTY) {
+                cell.setFillColor(sf::Color::Black); // Black empty spaces
             }
+            else if (grid[i][j] == PELLET) {
+                cell.setFillColor(sf::Color::Yellow); // Yellow pellets
+            }
+            window.draw(cell);
         }
-
-        // Clear the window
-        window.clear();
-
-        // Draw game over message
-        window.draw(gameOverText);
-
-        // Draw return to menu button
-        window.draw(returnToMenuButton.shape);
-        window.draw(returnToMenuButton.text);
-
-        // Draw restart button
-        window.draw(restartButton.shape);
-        window.draw(restartButton.text);
-
-        // Display the window
-        window.display();
     }
 }
 
@@ -276,56 +166,41 @@ int main() {
     float WINDOW_WIDTH = static_cast<float>(desktop.width);
     float WINDOW_HEIGHT = static_cast<float>(desktop.height);
 
+    // Adjust window size for Pac-Man-like maze
+    WINDOW_WIDTH = GRID_WIDTH * CELL_SIZE;
+    WINDOW_HEIGHT = GRID_HEIGHT * CELL_SIZE;
+
     // Create the window
-    sf::RenderWindow window(sf::VideoMode(static_cast<int>(WINDOW_WIDTH), static_cast<int>(WINDOW_HEIGHT)), "Collect Game", sf::Style::Fullscreen);
-
-    // Load background texture
-    sf::Texture backgroundTexture;
-    std::vector<Object> objects;
-    std::vector<Enemy> enemies;
-
-    // Load Level 1
-    loadLevel1(objects, enemies, backgroundTexture, WINDOW_WIDTH, WINDOW_HEIGHT);
-
-    // Scale the background sprite to fit the window size
-    float scaleX = WINDOW_WIDTH / backgroundTexture.getSize().x;
-    float scaleY = WINDOW_HEIGHT / backgroundTexture.getSize().y;
-    sf::Sprite backgroundSprite(backgroundTexture);
-    backgroundSprite.setScale(scaleX, scaleY);
-
-    // Load sound effect
-    sf::SoundBuffer buffer;
-    if (!buffer.loadFromFile("assets/collect_sound.wav")) {
-        // Handle error if sound loading fails
-    }
-    sf::Sound collectSound(buffer);
-
-    // Load player character
-    PlayerObject player(WINDOW_WIDTH, WINDOW_HEIGHT);
-
-    // Score counter
-    int score = 0;
+    sf::RenderWindow window(sf::VideoMode(static_cast<int>(WINDOW_WIDTH), static_cast<int>(WINDOW_HEIGHT)), "Collect Game");
 
     // Load font
     sf::Font font;
     if (!font.loadFromFile("arial.ttf")) {
         // Handle error if font loading fails
+        return EXIT_FAILURE;
     }
 
-    // Title screen
-    sf::Text titleText;
-    titleText.setFont(font);
-    titleText.setString("Collect Game\nPress P to Play\nPress Q to Quit");
-    titleText.setCharacterSize(40);
-    titleText.setFillColor(sf::Color::White);
-    titleText.setPosition(WINDOW_WIDTH / 2 - 200, WINDOW_HEIGHT / 4);
+    // Score counter text
+    sf::Text objectCountText;
+    objectCountText.setFont(font);
+    objectCountText.setCharacterSize(24);
+    objectCountText.setFillColor(sf::Color::White);
+    objectCountText.setPosition(10, 40); // Adjust the position as needed
 
-    // Quit button
-    Button quitButton(WINDOW_WIDTH - 120, 10, 100, 50, "Quit Game", font);
+    // Load Level 1
+    std::vector<Object> objects;
+    std::vector<Enemy> enemies;
+    loadLevel1(objects, enemies, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+    // Player setup
+    sf::CircleShape player(10.f); // Player circle shape
+    player.setFillColor(sf::Color::Green);
+    player.setPosition(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
 
     // Game loop
-    bool inGame = false; // Flag to indicate if the game is running
     bool paused = false; // Flag to indicate if the game is paused
+    bool gameOver = false; // Flag to indicate if the game is over
+    int score = 0; // Score counter
     while (window.isOpen()) {
         // Handle events
         sf::Event event;
@@ -333,197 +208,198 @@ int main() {
             if (event.type == sf::Event::Closed)
                 window.close();
 
-            if (event.type == sf::Event::KeyPressed) {
-                if (event.key.code == sf::Keyboard::P && !inGame && !paused) {
-                    inGame = true; // Start the game
+            if (!gameOver && !paused) {
+                if (event.type == sf::Event::KeyPressed) {
+                    if (event.key.code == sf::Keyboard::Escape) {
+                        paused = true; // Pause the game
+                    }
                 }
-                else if (event.key.code == sf::Keyboard::Escape && inGame) {
-                    paused = true; // Toggle pause state
+            }
+            else if (gameOver) {
+                if (event.type == sf::Event::KeyPressed) {
+                    if (event.key.code == sf::Keyboard::R) {
+                        // Play again
+                        gameOver = false;
+                        paused = false;
+                        score = 0;
+                        objects.clear();
+                        enemies.clear();
+                        loadLevel1(objects, enemies, WINDOW_WIDTH, WINDOW_HEIGHT);
+                    }
+                    else if (event.key.code == sf::Keyboard::Q) {
+                        // Quit game
+                        window.close();
+                    }
                 }
-                else if (event.key.code == sf::Keyboard::Q && !inGame && !paused) {
-                    window.close(); // Quit if in title screen
+            }
+            else if (paused) {
+                if (event.type == sf::Event::KeyPressed) {
+                    if (event.key.code == sf::Keyboard::Escape) {
+                        paused = false; // Resume the game
+                    }
+                    else if (event.key.code == sf::Keyboard::Q) {
+                        window.close(); // Quit game
+                    }
+                    else if (event.key.code == sf::Keyboard::R) {
+                        // Restart game
+                        paused = false;
+                        score = 0;
+                        objects.clear();
+                        enemies.clear();
+                        loadLevel1(objects, enemies, WINDOW_WIDTH, WINDOW_HEIGHT);
+                    }
                 }
             }
         }
 
-        if (!inGame) {
+        if (!paused && !gameOver) {
+            // Player movement
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::W) && player.getPosition().y > 0) {
+                player.move(0, -PLAYER_SPEED);
+            }
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::A) && player.getPosition().x > 0) {
+                player.move(-PLAYER_SPEED, 0);
+            }
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::S) && player.getPosition().y < WINDOW_HEIGHT - player.getRadius() * 2) {
+                player.move(0, PLAYER_SPEED);
+            }
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::D) && player.getPosition().x < WINDOW_WIDTH - player.getRadius() * 2) {
+                player.move(PLAYER_SPEED, 0);
+            }
+
+            // Collision detection between player and objects
+            for (Object& obj : objects) {
+                if (player.getGlobalBounds().intersects(obj.shape.getGlobalBounds()) && !obj.isCollected) {
+                    obj.isCollected = true;
+                    score++;
+                }
+            }
+
+
+
+            // Check if objects need to be respawned
+            bool respawnNeeded = false;
+            for (const Object& obj : objects) {
+                if (obj.isCollected) {
+                    respawnNeeded = true;
+                    break;
+                }
+            }
+            if (respawnNeeded) {
+                for (Object& obj : objects) {
+                    if (obj.isCollected) {
+                        obj.respawn(WINDOW_WIDTH, WINDOW_HEIGHT);
+                    }
+                }
+            }
+
+            // Collision detection between player and enemies
+            for (const Enemy& enemy : enemies) {
+                if (player.getGlobalBounds().intersects(enemy.sprite.getGlobalBounds())) {
+                    // Game over
+                    gameOver = true;
+
+                }
+            }
+            \
+
+            // Update enemies
+            for (Enemy& enemy : enemies) {
+                enemy.update(WINDOW_WIDTH, WINDOW_HEIGHT);
+            }
+
             // Clear the window
             window.clear();
 
-            // Draw title screen
-            window.draw(titleText);
+            // Draw Pac-Man-like background
+            drawBackground(window);
 
-            // Draw quit button
-            window.draw(quitButton.shape);
-            window.draw(quitButton.text);
-
-            // Display the window
-            window.display();
-        }
-        else {
-            if (paused) {
-                // Draw paused menu
-                sf::Text pausedText;
-                pausedText.setFont(font);
-                pausedText.setString("Paused");
-                pausedText.setCharacterSize(40);
-                pausedText.setFillColor(sf::Color::White);
-                pausedText.setPosition(WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 - 50);
-
-                // Continue button
-                Button continueButton(WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 + 20, 200, 50, "Continue", font);
-
-                // Return to Menu button
-                Button returnToMenuButton(WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 + 100, 200, 50, "Menu", font);
-
-                // Restart button
-                Button restartButton(WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 + 180, 200, 50, "Restart", font);
-
-                while (window.isOpen() && paused) {
-                    sf::Event event;
-                    while (window.pollEvent(event)) {
-                        if (event.type == sf::Event::Closed) {
-                            window.close();
-                        }
-                        // Handle button clicks
-                        if (event.type == sf::Event::MouseButtonPressed) {
-                            sf::Vector2f mousePosition = window.mapPixelToCoords(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
-                            if (continueButton.isClicked(mousePosition)) {
-                                paused = false; // Resume the game
-                            }
-                            else if (returnToMenuButton.isClicked(mousePosition)) {
-                                inGame = false; // Return to title screen
-                                paused = false;
-                            }
-                            else if (restartButton.isClicked(mousePosition)) {
-                                // Reset score
-                                score = 0;
-                                // Reset objects and enemies
-                                objects.clear();
-                                enemies.clear();
-                                loadLevel1(objects, enemies, backgroundTexture, WINDOW_WIDTH, WINDOW_HEIGHT);
-                                // Reset player position
-                                player.sprite.setPosition(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
-                                // Resume the game
-                                paused = false;
-                            }
-                        }
-                    }
-
-                    // Clear the window
-                    window.clear();
-
-                    // Draw paused menu
-                    window.draw(pausedText);
-                    window.draw(continueButton.shape);
-                    window.draw(continueButton.text);
-                    window.draw(returnToMenuButton.shape);
-                    window.draw(returnToMenuButton.text);
-                    window.draw(restartButton.shape);
-                    window.draw(restartButton.text);
-
-                    // Display the window
-                    window.display();
+            // Draw objects
+            for (const Object& obj : objects) {
+                if (!obj.isCollected) {
+                    window.draw(obj.shape);
                 }
             }
-            else {
-                // Player movement
-                if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) {
-                    player.sprite.move(0, -PLAYER_SPEED);
-                }
-                if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) {
-                    player.sprite.move(-PLAYER_SPEED, 0);
-                }
-                if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) {
-                    player.sprite.move(0, PLAYER_SPEED);
-                }
-                if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) {
-                    player.sprite.move(PLAYER_SPEED, 0);
-                }
 
-                // Update player
-                player.update(WINDOW_WIDTH, WINDOW_HEIGHT);
-
-                // Collision detection between player and objects
-                for (Object& obj : objects) {
-                    if (player.sprite.getGlobalBounds().intersects(obj.shape.getGlobalBounds()) && !obj.isCollected) {
-                        obj.isCollected = true;
-                        score++;
-                        collectSound.play();
-                    }
-                }
-
-                // Check if objects need to be respawned
-                bool respawnNeeded = false;
-                for (const Object& obj : objects) {
-                    if (obj.isCollected) {
-                        respawnNeeded = true;
-                        break;
-                    }
-                }
-                if (respawnNeeded) {
-                    for (Object& obj : objects) {
-                        if (obj.isCollected) {
-                            obj.respawn(WINDOW_WIDTH, WINDOW_HEIGHT);
-                        }
-                    }
-                }
-
-                // Collision detection between player and enemies
-                for (Enemy& enemy : enemies) {
-                    if (player.sprite.getGlobalBounds().intersects(enemy.sprite.getGlobalBounds())) {
-                        // Game over
-                        std::vector<Player> players = loadPlayerData();
-                        Player currentPlayer;
-                        currentPlayer.name = "Player"; // Set the player name to whatever you want
-                        currentPlayer.score = score;
-                        updateLeaderboard(players, currentPlayer);
-                        savePlayerData(players);
-                        displayLeaderboard(players);
-                        handleGameOver(window, font, score, objects, enemies, backgroundTexture, WINDOW_WIDTH, WINDOW_HEIGHT, player);
-                        inGame = false;
-                    }
-                }
-
-                // Update enemies
-                for (Enemy& enemy : enemies) {
-                    enemy.update(WINDOW_WIDTH, WINDOW_HEIGHT);
-                }
-
-                // Clear the window
-                window.clear();
-
-                // Draw background
-                window.draw(backgroundSprite);
-
-                // Draw objects
-                for (const Object& obj : objects) {
-                    if (!obj.isCollected) {
-                        window.draw(obj.shape);
-                    }
-                }
-
-                // Draw enemies
-                for (const Enemy& enemy : enemies) {
-                    window.draw(enemy.sprite);
-                }
-
-                // Draw player
-                window.draw(player.sprite);
-
-                // Draw score
-                sf::Text scoreText;
-                scoreText.setFont(font);
-                scoreText.setString("Score: " + std::to_string(score));
-                scoreText.setCharacterSize(24);
-                scoreText.setFillColor(sf::Color::White);
-                scoreText.setPosition(10, 10);
-                window.draw(scoreText);
-
-                // Display the window
-                window.display();
+            // Draw enemies
+            for (const Enemy& enemy : enemies) {
+                window.draw(enemy.sprite);
             }
+
+            // Draw player
+            window.draw(player);
+
+            // Update and draw score counter
+            objectCountText.setString("Score: " + std::to_string(score));
+            window.draw(objectCountText);
         }
+
+        // If game over, display game over message and buttons
+        if (gameOver) {
+            sf::Text gameOverText;
+            gameOverText.setFont(font);
+            gameOverText.setString("Game Over!");
+            gameOverText.setCharacterSize(36);
+            gameOverText.setFillColor(sf::Color::White);
+            gameOverText.setPosition(WINDOW_WIDTH / 2 - gameOverText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 - gameOverText.getGlobalBounds().height);
+
+            sf::Text playAgainText;
+            playAgainText.setFont(font);
+            playAgainText.setString("Play Again? (press R)");
+            playAgainText.setCharacterSize(24);
+            playAgainText.setFillColor(sf::Color::White);
+            playAgainText.setPosition(WINDOW_WIDTH / 2 - playAgainText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 + 50);
+
+            sf::Text quitGameText;
+            quitGameText.setFont(font);
+            quitGameText.setString("Quit Game (press Q)");
+            quitGameText.setCharacterSize(24);
+            quitGameText.setFillColor(sf::Color::White);
+            quitGameText.setPosition(WINDOW_WIDTH / 2 - quitGameText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 + 100);
+
+            window.draw(gameOverText);
+            window.draw(playAgainText);
+            window.draw(quitGameText);
+        }
+
+        // If paused, display pause menu with options
+        if (paused) {
+            sf::Text pauseText;
+            pauseText.setFont(font);
+            pauseText.setString("Game Paused");
+            pauseText.setCharacterSize(36);
+            pauseText.setFillColor(sf::Color::White);
+            pauseText.setPosition(WINDOW_WIDTH / 2 - pauseText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 - pauseText.getGlobalBounds().height);
+
+            sf::Text continueText;
+            continueText.setFont(font);
+            continueText.setString("ESC (Continue playing)");
+            continueText.setCharacterSize(24);
+            continueText.setFillColor(sf::Color::White);
+            continueText.setPosition(WINDOW_WIDTH / 2 - continueText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 + 50);
+
+            sf::Text restartText;
+            restartText.setFont(font);
+            restartText.setString("R (Restart)");
+            restartText.setCharacterSize(24);
+            restartText.setFillColor(sf::Color::White);
+            restartText.setPosition(WINDOW_WIDTH / 2 - restartText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 + 100);
+
+            sf::Text quitText;
+            quitText.setFont(font);
+            quitText.setString("Q (Quit)");
+            quitText.setCharacterSize(24);
+            quitText.setFillColor(sf::Color::White);
+            quitText.setPosition(WINDOW_WIDTH / 2 - quitText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 + 150);
+
+            window.draw(pauseText);
+            window.draw(continueText);
+            window.draw(restartText);
+            window.draw(quitText);
+        }
+
+        // Display the window
+        window.display();
     }
 
     return 0;
