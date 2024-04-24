@@ -1,406 +1,231 @@
 #include <SFML/Graphics.hpp>
-#include <SFML/Audio.hpp>
 #include <vector>
-#include <cstdlib>
-#include <ctime>
 #include <iostream>
 
 // Define constants
-const int NUM_OBJECTS = 10;
-const int NUM_ENEMIES = 5;
-const float OBJECT_RADIUS = 10.0f;
-const float ENEMY_SPEED = 0.2f; // Increased enemy speed
-const float PLAYER_SPEED = 0.4f; // Player movement speed
+const int WINDOW_WIDTH = 800;
+const int WINDOW_HEIGHT = 600;
+const float PLAYER_SPEED = 600.0f; // Increased player speed
+const float ITEM_SPEED = 200.0f; // Decreased item speed for smoother gameplay
+const int NUM_BOMBS = 2; // Increased number of bombs
+const float FRUIT_SPAWN_INTERVAL = 0.4f; // Adjusted fruit spawn interval
+const float BOMB_SPAWN_INTERVAL = 1.5f; // Adjusted bomb spawn interval
+const int SCORE_PER_FRUIT = 10; // Adjusted score per fruit
 
-// Define Pac-Man grid constants
-const int GRID_WIDTH = 30;
-const int GRID_HEIGHT = 21;
-const int CELL_SIZE = 30;
-const int WALL = 1;
-const int EMPTY = 0;
-const int PELLET = 2;
-
-// Object class
-class Object {
-public:
-    sf::CircleShape shape;
-    bool isCollected;
-
-    Object(float x, float y) {
-        shape.setRadius(OBJECT_RADIUS);
-        shape.setFillColor(sf::Color::Red);
-        shape.setPosition(x, y);
-        isCollected = false;
-    }
-
-    void respawn(float windowWidth, float windowHeight) {
-        // Respawn object at a random position
-        shape.setPosition(static_cast<float>(rand() % static_cast<int>(windowWidth)),
-            static_cast<float>(rand() % static_cast<int>(windowHeight)));
-        isCollected = false;
-    }
-};
-
-// Enemy class
-class Enemy {
-public:
-    sf::Texture texture;
-    sf::Sprite sprite;
-    sf::Vector2f velocity;
-
-    Enemy(float x, float y) {
-        if (!texture.loadFromFile("assets/enemy.png")) {
-            // Handle error if texture loading fails
-        }
-        sprite.setTexture(texture);
-        sprite.setPosition(x, y);
-        sprite.setScale(0.2f, 0.2f); // Scale the sprite to match player size
-        // Assign random velocity
-        velocity.x = (rand() % 2 == 0 ? ENEMY_SPEED : -ENEMY_SPEED); // Randomize direction
-        velocity.y = (rand() % 2 == 0 ? ENEMY_SPEED : -ENEMY_SPEED); // Randomize direction
-    }
-
-    void update(float windowWidth, float windowHeight) {
-        sprite.move(velocity);
-        // Bounce off the window edges
-        if (sprite.getPosition().x < 0 || sprite.getPosition().x > windowWidth)
-            velocity.x = -velocity.x;
-        if (sprite.getPosition().y < 0 || sprite.getPosition().y > windowHeight)
-            velocity.y = -velocity.y;
-    }
-};
-
-// Button class
-class Button {
+// Player class
+class Player {
 public:
     sf::RectangleShape shape;
-    sf::Text text;
+    sf::Vector2f velocity;
 
-    Button(float x, float y, float width, float height, std::string buttonText, sf::Font& font) {
-        shape.setPosition(x, y);
-        shape.setSize(sf::Vector2f(width, height));
-        shape.setFillColor(sf::Color(0, 0, 0, 128)); // Transparent black color
-
-        text.setFont(font);
-        text.setString(buttonText);
-        text.setCharacterSize(24);
-        text.setFillColor(sf::Color::White);
-        text.setPosition(x + 10, y + 10);
+    Player() {
+        shape.setSize(sf::Vector2f(50, 50));
+        shape.setFillColor(sf::Color::Green);
+        shape.setPosition(WINDOW_WIDTH / 2, WINDOW_HEIGHT - 100);
     }
 
-    bool isClicked(const sf::Vector2f& mousePosition) {
-        return shape.getGlobalBounds().contains(mousePosition);
+    void update(float deltaTime) {
+        shape.move(velocity * deltaTime);
     }
 };
 
-// Load Level 1 assets and configurations
-void loadLevel1(std::vector<Object>& objects, std::vector<Enemy>& enemies, float windowWidth, float windowHeight) {
-    // Create objects to collect for Level 1
-    for (int i = 0; i < NUM_OBJECTS; ++i) {
-        float x = static_cast<float>(rand() % static_cast<int>(windowWidth));
-        float y = static_cast<float>(rand() % static_cast<int>(windowHeight));
-        objects.push_back(Object(x, y));
+// Item class (base class for fruits and bombs)
+class Item {
+public:
+    sf::Sprite sprite;
+    int points;
+    bool collected;
+
+    Item(sf::Texture& texture, float posX, float posY, int points) {
+        sprite.setTexture(texture);
+        sprite.setPosition(posX, posY);
+        this->points = points;
+        collected = false;
     }
 
-    // Create enemies for Level 1
-    for (int i = 0; i < NUM_ENEMIES; ++i) {
-        float x = static_cast<float>(rand() % static_cast<int>(windowWidth));
-        float y = static_cast<float>(rand() % static_cast<int>(windowHeight));
-        enemies.push_back(Enemy(x, y));
+    virtual void update(float deltaTime) {
+        if (!collected)
+            sprite.move(0, ITEM_SPEED * deltaTime);
     }
-}
+};
 
-// Draw Pac-Man like background
-void drawBackground(sf::RenderWindow& window) {
-    // Pac-Man grid representing the background
-    int grid[GRID_HEIGHT][GRID_WIDTH] = {
-        {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-        {1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-        {1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1},
-        {1, 2, 1, 2, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 2, 0, 1},
-        {1, 0, 1, 2, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1},
-        {1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1},
-        {1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1},
-        {1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-        {1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1},
-        {1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1},
-        {1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-        {1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1},
-        {1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1},
-        {1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1},
-        {1, 0, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1},
-        {1, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 1},
-        {1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1},
-        {1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-        {1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1},
-        {1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1},
-        {1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1},
-   
-    };
+// Fruit classes
+class Apple : public Item {
+public:
+    Apple(sf::Texture& texture, float posX, float posY)
+        : Item(texture, posX, posY, SCORE_PER_FRUIT) {} // Apple worth SCORE_PER_FRUIT points
+};
 
-    // Draw the grid
-    for (int i = 0; i < GRID_HEIGHT; ++i) {
-        for (int j = 0; j < GRID_WIDTH; ++j) {
-            sf::RectangleShape cell(sf::Vector2f(CELL_SIZE, CELL_SIZE));
-            cell.setPosition(j * CELL_SIZE, i * CELL_SIZE);
-            if (grid[i][j] == WALL) {
-                cell.setFillColor(sf::Color(0, 0, 128)); // Blue walls
-            }
-            else if (grid[i][j] == EMPTY) {
-                cell.setFillColor(sf::Color::Black); // Black empty spaces
-            }
-            else if (grid[i][j] == PELLET) {
-                cell.setFillColor(sf::Color::Yellow); // Yellow pellets
-            }
-            window.draw(cell);
-        }
-    }
-}
+class Watermelon : public Item {
+public:
+    Watermelon(sf::Texture& texture, float posX, float posY)
+        : Item(texture, posX, posY, SCORE_PER_FRUIT) {} // Watermelon worth SCORE_PER_FRUIT points
+};
+
+class Banana : public Item {
+public:
+    Banana(sf::Texture& texture, float posX, float posY)
+        : Item(texture, posX, posY, SCORE_PER_FRUIT) {} // Banana worth SCORE_PER_FRUIT points
+};
+
+// Add more fruit classes...
+
+// Bomb class
+class Bomb : public Item {
+public:
+    Bomb(sf::Texture& texture, float posX, float posY)
+        : Item(texture, posX, posY, -50) {} // Bomb deducts 50 points
+};
 
 int main() {
-    // Seed the random number generator
-    std::srand(static_cast<unsigned>(std::time(nullptr)));
+    // Create game window
+    sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "Fruit Picker");
 
-    // Get the screen resolution
-    sf::VideoMode desktop = sf::VideoMode::getDesktopMode();
-    float WINDOW_WIDTH = static_cast<float>(desktop.width);
-    float WINDOW_HEIGHT = static_cast<float>(desktop.height);
+    // Create player
+    Player player;
 
-    // Adjust window size for Pac-Man-like maze
-    WINDOW_WIDTH = GRID_WIDTH * CELL_SIZE;
-    WINDOW_HEIGHT = GRID_HEIGHT * CELL_SIZE;
-
-    // Create the window
-    sf::RenderWindow window(sf::VideoMode(static_cast<int>(WINDOW_WIDTH), static_cast<int>(WINDOW_HEIGHT)), "Collect Game");
-
-    // Load font
-    sf::Font font;
-    if (!font.loadFromFile("arial.ttf")) {
-        // Handle error if font loading fails
-        return EXIT_FAILURE;
+    // Load textures for fruits and bombs
+    sf::Texture appleTexture;
+    if (!appleTexture.loadFromFile("assets/banana.png")) {
+        std::cerr << "Failed to load apple.png" << std::endl;
+        return 1;
     }
 
-    // Score counter text
-    sf::Text objectCountText;
-    objectCountText.setFont(font);
-    objectCountText.setCharacterSize(24);
-    objectCountText.setFillColor(sf::Color::White);
-    objectCountText.setPosition(10, 40); // Adjust the position as needed
+    sf::Texture watermelonTexture;
+    if (!watermelonTexture.loadFromFile("assets/watermelon.png")) {
+        std::cerr << "Failed to load watermelon.png" << std::endl;
+        return 1;
+    }
 
-    // Load Level 1
-    std::vector<Object> objects;
-    std::vector<Enemy> enemies;
-    loadLevel1(objects, enemies, WINDOW_WIDTH, WINDOW_HEIGHT);
+    sf::Texture bananaTexture;
+    if (!bananaTexture.loadFromFile("assets/banana.png")) {
+        std::cerr << "Failed to load banana.png" << std::endl;
+        return 1;
+    }
 
-    // Player setup
-    sf::CircleShape player(10.f); // Player circle shape
-    player.setFillColor(sf::Color::Green);
-    player.setPosition(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
+    sf::Texture bombTexture;
+    if (!bombTexture.loadFromFile("assets/bomb.png")) {
+        std::cerr << "Failed to load bomb.png" << std::endl;
+        return 1;
+    }
+
+    // Create vectors to hold items
+    std::vector<Item*> items;
+    std::vector<Bomb> bombs;
+
+    int score = 0;
 
     // Game loop
-    bool paused = false; // Flag to indicate if the game is paused
-    bool gameOver = false; // Flag to indicate if the game is over
-    int score = 0; // Score counter
+    sf::Clock clock;
+    float timeSinceLastFruitSpawn = 0.0f;
+    float timeSinceLastBombSpawn = 0.0f;
     while (window.isOpen()) {
+        sf::Time deltaTime = clock.restart();
+        float dtSeconds = deltaTime.asSeconds();
+
         // Handle events
         sf::Event event;
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed)
                 window.close();
+        }
 
-            if (!gameOver && !paused) {
-                if (event.type == sf::Event::KeyPressed) {
-                    if (event.key.code == sf::Keyboard::Escape) {
-                        paused = true; // Pause the game
-                    }
-                }
+        // Player movement
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::A))
+            player.velocity.x = -PLAYER_SPEED;
+        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::D))
+            player.velocity.x = PLAYER_SPEED;
+        else
+            player.velocity.x = 0;
+
+        // Update player
+        player.update(dtSeconds);
+
+        // Spawn fruits
+        timeSinceLastFruitSpawn += dtSeconds;
+        if (timeSinceLastFruitSpawn > FRUIT_SPAWN_INTERVAL) {
+            items.push_back(new Apple(appleTexture, rand() % WINDOW_WIDTH, -100));
+            items.push_back(new Watermelon(watermelonTexture, rand() % WINDOW_WIDTH, -200));
+            items.push_back(new Banana(bananaTexture, rand() % WINDOW_WIDTH, -300));
+            timeSinceLastFruitSpawn = 0.0f;
+        }
+
+        // Spawn bombs
+        timeSinceLastBombSpawn += dtSeconds;
+        if (timeSinceLastBombSpawn > BOMB_SPAWN_INTERVAL) {
+            for (int i = 0; i < NUM_BOMBS; ++i) {
+                bombs.push_back(Bomb(bombTexture, rand() % WINDOW_WIDTH, -400));
             }
-            else if (gameOver) {
-                if (event.type == sf::Event::KeyPressed) {
-                    if (event.key.code == sf::Keyboard::R) {
-                        // Play again
-                        gameOver = false;
-                        paused = false;
-                        score = 0;
-                        objects.clear();
-                        enemies.clear();
-                        loadLevel1(objects, enemies, WINDOW_WIDTH, WINDOW_HEIGHT);
-                    }
-                    else if (event.key.code == sf::Keyboard::Q) {
-                        // Quit game
-                        window.close();
-                    }
-                }
+            timeSinceLastBombSpawn = 0.0f;
+        }
+
+        // Item collisions (fruits and bombs)
+        for (auto& item : items) {
+            if (item->sprite.getGlobalBounds().intersects(player.shape.getGlobalBounds()) && !item->collected) {
+                item->collected = true;
+                score += item->points;
             }
-            else if (paused) {
-                if (event.type == sf::Event::KeyPressed) {
-                    if (event.key.code == sf::Keyboard::Escape) {
-                        paused = false; // Resume the game
-                    }
-                    else if (event.key.code == sf::Keyboard::Q) {
-                        window.close(); // Quit game
-                    }
-                    else if (event.key.code == sf::Keyboard::R) {
-                        // Restart game
-                        paused = false;
-                        score = 0;
-                        objects.clear();
-                        enemies.clear();
-                        loadLevel1(objects, enemies, WINDOW_WIDTH, WINDOW_HEIGHT);
-                    }
-                }
+        }
+        for (auto& bomb : bombs) {
+            if (bomb.sprite.getGlobalBounds().intersects(player.shape.getGlobalBounds())) {
+                // Handle bomb collision (e.g., player dies and restarts)
+                window.close();
             }
         }
 
-        if (!paused && !gameOver) {
-            // Player movement
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::W) && player.getPosition().y > 0) {
-                player.move(0, -PLAYER_SPEED);
+        // Update items (fruits and bombs)
+        for (auto it = items.begin(); it != items.end();) {
+            (*it)->update(dtSeconds);
+            if ((*it)->sprite.getPosition().y > WINDOW_HEIGHT) {
+                delete* it;
+                it = items.erase(it);
             }
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::A) && player.getPosition().x > 0) {
-                player.move(-PLAYER_SPEED, 0);
+            else {
+                ++it;
             }
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::S) && player.getPosition().y < WINDOW_HEIGHT - player.getRadius() * 2) {
-                player.move(0, PLAYER_SPEED);
-            }
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::D) && player.getPosition().x < WINDOW_WIDTH - player.getRadius() * 2) {
-                player.move(PLAYER_SPEED, 0);
-            }
+        }
+        for (auto& bomb : bombs)
+            bomb.update(dtSeconds);
 
-            // Collision detection between player and objects
-            for (Object& obj : objects) {
-                if (player.getGlobalBounds().intersects(obj.shape.getGlobalBounds()) && !obj.isCollected) {
-                    obj.isCollected = true;
-                    score++;
-                }
-            }
+        // Clear window
+        window.clear();
 
+        // Draw player
+        window.draw(player.shape);
 
-
-            // Check if objects need to be respawned
-            bool respawnNeeded = false;
-            for (const Object& obj : objects) {
-                if (obj.isCollected) {
-                    respawnNeeded = true;
-                    break;
-                }
-            }
-            if (respawnNeeded) {
-                for (Object& obj : objects) {
-                    if (obj.isCollected) {
-                        obj.respawn(WINDOW_WIDTH, WINDOW_HEIGHT);
-                    }
-                }
-            }
-
-            // Collision detection between player and enemies
-            for (const Enemy& enemy : enemies) {
-                if (player.getGlobalBounds().intersects(enemy.sprite.getGlobalBounds())) {
-                    // Game over
-                    gameOver = true;
-
-                }
-            }
-            \
-
-            // Update enemies
-            for (Enemy& enemy : enemies) {
-                enemy.update(WINDOW_WIDTH, WINDOW_HEIGHT);
-            }
-
-            // Clear the window
-            window.clear();
-
-            // Draw Pac-Man-like background
-            drawBackground(window);
-
-            // Draw objects
-            for (const Object& obj : objects) {
-                if (!obj.isCollected) {
-                    window.draw(obj.shape);
-                }
-            }
-
-            // Draw enemies
-            for (const Enemy& enemy : enemies) {
-                window.draw(enemy.sprite);
-            }
-
-            // Draw player
-            window.draw(player);
-
-            // Update and draw score counter
-            objectCountText.setString("Score: " + std::to_string(score));
-            window.draw(objectCountText);
+        // Draw items (fruits and bombs)
+        for (const auto& item : items) {
+            if (!item->collected)
+                window.draw(item->sprite);
         }
 
-        // If game over, display game over message and buttons
-        if (gameOver) {
-            sf::Text gameOverText;
-            gameOverText.setFont(font);
-            gameOverText.setString("Game Over!");
-            gameOverText.setCharacterSize(36);
-            gameOverText.setFillColor(sf::Color::White);
-            gameOverText.setPosition(WINDOW_WIDTH / 2 - gameOverText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 - gameOverText.getGlobalBounds().height);
-
-            sf::Text playAgainText;
-            playAgainText.setFont(font);
-            playAgainText.setString("Play Again? (press R)");
-            playAgainText.setCharacterSize(24);
-            playAgainText.setFillColor(sf::Color::White);
-            playAgainText.setPosition(WINDOW_WIDTH / 2 - playAgainText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 + 50);
-
-            sf::Text quitGameText;
-            quitGameText.setFont(font);
-            quitGameText.setString("Quit Game (press Q)");
-            quitGameText.setCharacterSize(24);
-            quitGameText.setFillColor(sf::Color::White);
-            quitGameText.setPosition(WINDOW_WIDTH / 2 - quitGameText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 + 100);
-
-            window.draw(gameOverText);
-            window.draw(playAgainText);
-            window.draw(quitGameText);
+        // Draw bombs
+        for (const auto& bomb : bombs) {
+            if (!bomb.collected)
+                window.draw(bomb.sprite);
         }
 
-        // If paused, display pause menu with options
-        if (paused) {
-            sf::Text pauseText;
-            pauseText.setFont(font);
-            pauseText.setString("Game Paused");
-            pauseText.setCharacterSize(36);
-            pauseText.setFillColor(sf::Color::White);
-            pauseText.setPosition(WINDOW_WIDTH / 2 - pauseText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 - pauseText.getGlobalBounds().height);
-
-            sf::Text continueText;
-            continueText.setFont(font);
-            continueText.setString("ESC (Continue playing)");
-            continueText.setCharacterSize(24);
-            continueText.setFillColor(sf::Color::White);
-            continueText.setPosition(WINDOW_WIDTH / 2 - continueText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 + 50);
-
-            sf::Text restartText;
-            restartText.setFont(font);
-            restartText.setString("R (Restart)");
-            restartText.setCharacterSize(24);
-            restartText.setFillColor(sf::Color::White);
-            restartText.setPosition(WINDOW_WIDTH / 2 - restartText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 + 100);
-
-            sf::Text quitText;
-            quitText.setFont(font);
-            quitText.setString("Q (Quit)");
-            quitText.setCharacterSize(24);
-            quitText.setFillColor(sf::Color::White);
-            quitText.setPosition(WINDOW_WIDTH / 2 - quitText.getGlobalBounds().width / 2, WINDOW_HEIGHT / 2 + 150);
-
-            window.draw(pauseText);
-            window.draw(continueText);
-            window.draw(restartText);
-            window.draw(quitText);
+        // Draw score
+        sf::Font font;
+        if (!font.loadFromFile("arial.ttf")) {
+            std::cerr << "Failed to load font file" << std::endl;
+            return 1;
         }
+        sf::Text scoreText;
+        scoreText.setFont(font);
+        scoreText.setString("Score: " + std::to_string(score));
+        scoreText.setCharacterSize(24);
+        scoreText.setFillColor(sf::Color::White);
+        scoreText.setPosition(10, 10);
+        window.draw(scoreText);
 
-        // Display the window
+        // Display content
         window.display();
     }
+
+    // Clean up dynamically allocated memory
+    for (auto& item : items)
+        delete item;
 
     return 0;
 }
