@@ -1,37 +1,81 @@
 #include <SFML/Graphics.hpp>
 #include <vector>
 #include <iostream>
+#include <cstdlib>
+#include <ctime>
+#include "TileMap.h"
 
 // Define constants
-const int WINDOW_WIDTH = 800;
-const int WINDOW_HEIGHT = 600;
+const int WINDOW_WIDTH = 1920;
+const int WINDOW_HEIGHT = 1080;
 const float PLAYER_SPEED = 900.0f;
 const float ITEM_SPEED = 200.0f;
 const int NUM_BOMBS = 2;
 const float FRUIT_SPAWN_INTERVAL = 0.4f;
 const float BOMB_SPAWN_INTERVAL = 1.5f;
 const int SCORE_PER_FRUIT = 10;
+const float PLAYER_WIDTH = 150.0f;
+const float PLAYER_HEIGHT = 350.0f;
+const float COLLISION_REDUCTION = 10.0f;
+
+// Define constants for animation
+const int FRAME_WIDTH = 24; // Width of each frame
+const int FRAME_HEIGHT = 24; // Height of each frame
+const int NUM_FRAMES = 3; // Number of frames in the animation (neutral, left, right)
 
 // Player class
 class Player {
 public:
     sf::Sprite sprite;
     sf::Vector2f velocity;
+    int currentFrame; // Current frame index for animation
 
-    Player(sf::Texture& texture) {
+    Player(sf::Texture& texture) : currentFrame(0) {
         sprite.setTexture(texture);
         sprite.setScale(1.5f, 1.5f);
-        sprite.setPosition(WINDOW_WIDTH / 2, WINDOW_HEIGHT - 100);
+        // Set initial texture rectangle to display the neutral frame
+        sprite.setTextureRect(sf::IntRect(FRAME_WIDTH, 0, FRAME_WIDTH, FRAME_HEIGHT));
+        // Adjust starting position to the bottom of the window
+        sprite.setPosition((WINDOW_WIDTH - PLAYER_WIDTH) / 2, WINDOW_HEIGHT - PLAYER_HEIGHT);
     }
 
     void update(float deltaTime) {
         // Update player position while keeping it within bounds
         sf::Vector2f nextPosition = sprite.getPosition() + velocity * deltaTime;
-        nextPosition.x = std::max(0.0f, std::min(WINDOW_WIDTH - sprite.getGlobalBounds().width, nextPosition.x));
-        nextPosition.y = std::max(0.0f, std::min(WINDOW_HEIGHT - sprite.getGlobalBounds().height, nextPosition.y));
+        nextPosition.x = std::max(0.0f, std::min(WINDOW_WIDTH - PLAYER_WIDTH, nextPosition.x));
+        nextPosition.y = std::max(0.0f, std::min(WINDOW_HEIGHT - PLAYER_HEIGHT, nextPosition.y));
         sprite.setPosition(nextPosition);
+
+        // Update animation frame based on velocity
+        if (velocity.x < 0) {
+            currentFrame = 17; // Left animation frame
+        }
+        else if (velocity.x > 0) {
+            currentFrame = 18; // Right animation frame
+        }
+        else {
+            currentFrame = 0; // Neutral frame
+        }
+        // Update texture rectangle for animation
+        sprite.setTextureRect(sf::IntRect(currentFrame * FRAME_WIDTH, 0, FRAME_WIDTH, FRAME_HEIGHT));
     }
 };
+
+// Texture loading function
+void loadPlayerTexture(sf::Texture& texture) {
+    if (!texture.loadFromFile("assets/player_spritesheet.png")) {
+        std::cerr << "Failed to load player_spritesheet.png" << std::endl;
+        exit(1);
+    }
+}
+
+// Function to load tree texture
+void loadTreeTexture(sf::Texture& texture) {
+    if (!texture.loadFromFile("assets/tree.png")) {
+        std::cerr << "Failed to load tree.png" << std::endl;
+        exit(1);
+    }
+}
 
 // Item class (base class for fruits and bombs)
 class Item {
@@ -51,6 +95,11 @@ public:
         if (!collected)
             sprite.move(0, ITEM_SPEED * deltaTime);
     }
+
+    virtual sf::FloatRect getCollisionBounds() const {
+        // By default, use the sprite's global bounds for collision detection
+        return sprite.getGlobalBounds();
+    }
 };
 
 // Fruit classes
@@ -60,23 +109,23 @@ public:
         : Item(texture, posX, posY, SCORE_PER_FRUIT) {} // Apple worth SCORE_PER_FRUIT points
 };
 
-class Watermelon : public Item {
-public:
-    Watermelon(sf::Texture& texture, float posX, float posY)
-        : Item(texture, posX, posY, SCORE_PER_FRUIT) {} // Watermelon worth SCORE_PER_FRUIT points
-};
-
-class Banana : public Item {
-public:
-    Banana(sf::Texture& texture, float posX, float posY)
-        : Item(texture, posX, posY, SCORE_PER_FRUIT) {} // Banana worth SCORE_PER_FRUIT points
-};
-
 // Bomb class
 class Bomb : public Item {
 public:
     Bomb(sf::Texture& texture, float posX, float posY)
         : Item(texture, posX, posY, -50) {} // Bomb deducts 50 points
+
+    // Override the getCollisionBounds function to adjust bomb collision bounds
+    sf::FloatRect getCollisionBounds() const override {
+        // Adjust collision bounds based on current animation frame
+        sf::FloatRect bounds = sprite.getGlobalBounds();
+        // Reduce bounds by COLLISION_REDUCTION pixels on each side
+        bounds.left += COLLISION_REDUCTION;
+        bounds.width -= 2 * COLLISION_REDUCTION;
+        bounds.top += COLLISION_REDUCTION;
+        bounds.height -= 2 * COLLISION_REDUCTION;
+        return bounds;
+    }
 };
 
 void handleEscapeMenu(sf::RenderWindow& window, bool& gamePaused) {
@@ -131,7 +180,6 @@ void handleEscapeMenu(sf::RenderWindow& window, bool& gamePaused) {
         }
     }
 }
-
 
 // Function to handle game over menu
 bool handleGameOverMenu(sf::RenderWindow& window) {
@@ -191,31 +239,15 @@ bool handleGameOverMenu(sf::RenderWindow& window) {
 }
 
 int main() {
-    sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "Fruit Picker");
+    // Get desktop resolution
+    sf::VideoMode desktopMode = sf::VideoMode::getDesktopMode();
+    // Create a fullscreen window with desktop resolution
+    sf::RenderWindow window(sf::VideoMode(desktopMode.width, desktopMode.height), "Fruit Picker", sf::Style::Fullscreen);
 
-    // Create boundaries
-    sf::RectangleShape boundary;
-    boundary.setSize(sf::Vector2f(WINDOW_WIDTH, WINDOW_HEIGHT));
-    boundary.setFillColor(sf::Color::Transparent);
-    boundary.setOutlineThickness(2.0f);
-    boundary.setOutlineColor(sf::Color::White);
-
-    // Load textures...
+    // Load textures
     sf::Texture appleTexture;
     if (!appleTexture.loadFromFile("assets/apple.png")) {
         std::cerr << "Failed to load apple.png" << std::endl;
-        return 1;
-    }
-
-    sf::Texture bananaTexture;
-    if (!bananaTexture.loadFromFile("assets/banana.png")) {
-        std::cerr << "Failed to load banana.png" << std::endl;
-        return 1;
-    }
-
-    sf::Texture watermelonTexture;
-    if (!watermelonTexture.loadFromFile("assets/watermelon.png")) {
-        std::cerr << "Failed to load watermelon.png" << std::endl;
         return 1;
     }
 
@@ -225,17 +257,26 @@ int main() {
         return 1;
     }
 
-    // Load other textures...
-
-    // Create player...
     sf::Texture playerTexture;
-    if (!playerTexture.loadFromFile("assets/player.png")) {
-        std::cerr << "Failed to load player.png" << std::endl;
+    loadPlayerTexture(playerTexture); // Load player sprite sheet
+    // Ensure that the player texture dimensions are divisible by the frame dimensions
+    if (playerTexture.getSize().x % FRAME_WIDTH != 0 || playerTexture.getSize().y != FRAME_HEIGHT) {
+        std::cerr << "Player sprite sheet dimensions are invalid" << std::endl;
         return 1;
     }
+
+    sf::Texture treeTexture;
+    loadTreeTexture(treeTexture); // Load tree texture
+
+    // Create player
     Player player(playerTexture);
 
-    // Create vectors for items and bombs...
+    // Create the middle tree
+    sf::Sprite middleTree;
+    middleTree.setTexture(treeTexture);
+    middleTree.setPosition((WINDOW_WIDTH - middleTree.getGlobalBounds().width) / 2, 0);
+
+    // Create vectors for items and bombs
     std::vector<Item*> items;
     std::vector<Bomb> bombs;
 
@@ -248,6 +289,7 @@ int main() {
     float timeSinceLastFruitSpawn = 0.0f;
     float timeSinceLastBombSpawn = 0.0f;
     bool gameOver = false;
+
     while (window.isOpen()) {
         sf::Time deltaTime = clock.restart();
         float dtSeconds = deltaTime.asSeconds();
@@ -277,33 +319,38 @@ int main() {
             // Update player
             player.update(dtSeconds);
 
-            // Spawn fruits
+            // Spawn fruits from the top with random X positions across multiple lines
             timeSinceLastFruitSpawn += dtSeconds;
             if (timeSinceLastFruitSpawn > FRUIT_SPAWN_INTERVAL) {
-                items.push_back(new Apple(appleTexture, rand() % WINDOW_WIDTH, -100));
-                items.push_back(new Watermelon(watermelonTexture, rand() % WINDOW_WIDTH, -200));
-                items.push_back(new Banana(bananaTexture, rand() % WINDOW_WIDTH, -300));
+                for (int i = 0; i < 2; ++i) { // Reduce the number of lines
+                    float posX = std::rand() % (WINDOW_WIDTH - 200) + 100; // Random X position across the screen (avoiding edges)
+                    float posY = 50 * (i + 1); // Start above the screen, increment Y for each line
+                    items.push_back(new Apple(appleTexture, posX, posY));
+                }
                 timeSinceLastFruitSpawn = 0.0f;
             }
 
-            // Spawn bombs
+            // Spawn bombs from the top with random X positions across multiple lines
             timeSinceLastBombSpawn += dtSeconds;
             if (timeSinceLastBombSpawn > BOMB_SPAWN_INTERVAL) {
-                for (int i = 0; i < NUM_BOMBS; ++i) {
-                    bombs.push_back(Bomb(bombTexture, rand() % WINDOW_WIDTH, -400));
+                for (int i = 0; i < 2; ++i) { // Reduce the number of lines
+                    float posX = std::rand() % (WINDOW_WIDTH - 200) + 100; // Random X position across the screen (avoiding edges)
+                    float posY = 50 * (i + 1); // Start above the screen, increment Y for each line
+                    bombs.push_back(Bomb(bombTexture, posX, posY));
                 }
                 timeSinceLastBombSpawn = 0.0f;
             }
 
             // Item collisions (fruits and bombs)
             for (auto& item : items) {
-                if (item->sprite.getGlobalBounds().intersects(player.sprite.getGlobalBounds()) && !item->collected) {
+                if (item->getCollisionBounds().intersects(player.sprite.getGlobalBounds()) && !item->collected) {
                     item->collected = true;
                     score += item->points;
                 }
             }
+
             for (auto& bomb : bombs) {
-                if (bomb.sprite.getGlobalBounds().intersects(player.sprite.getGlobalBounds())) {
+                if (bomb.getCollisionBounds().intersects(player.sprite.getGlobalBounds())) {
                     // Game over
                     gameOver = true;
                     if (handleGameOverMenu(window)) {
@@ -313,7 +360,7 @@ int main() {
                         items.clear();
                         bombs.clear();
                         score = 0;
-                        player.sprite.setPosition(WINDOW_WIDTH / 2, WINDOW_HEIGHT - 100);
+                        player.sprite.setPosition((WINDOW_WIDTH - PLAYER_WIDTH) / 2, WINDOW_HEIGHT - PLAYER_HEIGHT);
                         gameOver = false;
                     }
                     else {
@@ -341,8 +388,8 @@ int main() {
         // Clear window
         window.clear();
 
-        // Draw boundaries
-        window.draw(boundary);
+        // Draw the middle tree
+        window.draw(middleTree);
 
         // Draw player
         window.draw(player.sprite);
@@ -375,11 +422,10 @@ int main() {
 
         // Display content
         window.display();
-    }
 
-    // Clean up dynamically allocated memory
-    for (auto& item : items)
-        delete item;
+
+
+    }
 
     return 0;
 }

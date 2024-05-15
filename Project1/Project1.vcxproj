@@ -135,12 +135,19 @@
   <ItemGroup>
     <ClCompile Include="game.cpp" />
     <ClCompile Include="source.cpp" />
+    <ClCompile Include="TileMap.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Project1.rc" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="assets\banana.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="map.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="TileMap.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
